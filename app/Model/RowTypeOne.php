@@ -43,7 +43,7 @@ class RowTypeOne extends AbstractRow
     {
 
         /**
-         * Or row full of junk.
+         * Row full of junk.
          * Skipp it.
          */
 
@@ -54,11 +54,12 @@ class RowTypeOne extends AbstractRow
         }
 
         /**
-         * Row with some strange data.
+         * Three rows at the end of bank (logical part of log file).
+         * Those rows are repeated in each bank, we don't need them.
          * Skipp it.
          */
 
-        if (explode(',', $this->explodedRow[2])[0] == 42) {
+        if (in_array(explode(',', $this->explodedRow[2])[0], [40, 41, 42])) {
 
             return false;
         }
@@ -86,24 +87,55 @@ class RowTypeOne extends AbstractRow
     }
 
     /**
-     * Determine if data row has data, not only 0.
+     * Create date for current row.
      *
      * @return mixed
      */
-    public function containEmptyData()
+    protected function makeDate()
     {
 
-        return end($this->explodedData) == -1;
+        return (clone $this->DateTime)->add(new \DateInterval('PT' . $this->explodedData[1] . 'M'))->format('Y-m-d');
     }
 
     /**
-     * Create date and time for current row.
+     * Create time for current row.
      *
      * @return mixed
      */
-    protected function makeDateTime()
+    protected function makeTime()
     {
 
-        return (clone $this->DateTime)->add(new \DateInterval('PT' . $this->explodedData[1] . 'M'))->format('Y-m-d H:m');
+        return (clone $this->DateTime)->add(new \DateInterval('PT' . $this->explodedData[1] . 'M'))->format('H:m');
+    }
+
+    /**
+     * Return array of data without numbering and any other artificial information.
+     *
+     * @return array
+     */
+    protected function getCleanData() {
+
+        array_shift($this->explodedData);
+        array_shift($this->explodedData);
+
+        $this->replaceBlankData();
+
+        return $this->explodedData;
+    }
+
+    /**
+     * Determine if row has useful data or blank records.
+     *
+     * @return bool
+     */
+    protected function hasBlankData() {
+
+        $lastValue = end($this->explodedData);
+        if ($lastValue == -1) {
+
+            return false;
+        }
+
+        return true;
     }
 }

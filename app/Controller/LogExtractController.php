@@ -29,6 +29,8 @@ class LogExtractController
         $inputPath = Helper\ConfigHelper::get('paths.inputPath');
         $DataHelper = new Helper\DataHelper($inputPath);
 
+        $CSVDate = new Model\CSVDate();
+
         if (!$DataHelper->hasFiles()) {
 
             $message = "There is no log files in {$inputPath} directory.";
@@ -37,20 +39,43 @@ class LogExtractController
             die($message . '</br>');
         }
 
-        $filteredData = [];
+        $data = [];
         foreach ($DataHelper->getFiles() as $file) {
 
             try {
 
-                $File = new Model\File($file);
-                $filteredData = array_merge($filteredData, $File->extractData());
+                $DateTime = $CSVDate->getDateForFile($file);
+                $File = new Model\File($file, $DateTime);
+                $data = array_merge($data, $File->extractData());
             } catch (\Exception $e) {
 
                 Helper\LogHelper::getInstance()->addMessage($e->getMessage());
             }
         }
 
-        Helper\CSVHelper::exportToCsv($filteredData, Helper\ConfigHelper::get('paths.outputFile'));
+        $this->export($data);
+
         Helper\LogHelper::getInstance()->write();
+    }
+
+    /**
+     * Export extracted data to output file.
+     *
+     * @param array $data
+     */
+    protected function export(array $data)
+    {
+
+        switch (Helper\ConfigHelper::get('output_file.format')) {
+
+            case 'json':
+
+                Helper\JSONHelper::export($data, Helper\ConfigHelper::get('output_file.file_name'));
+                break;
+            case 'csv':
+
+                Helper\CSVHelper::export($data, Helper\ConfigHelper::get('output_file.file_name'));
+            default:
+        }
     }
 }

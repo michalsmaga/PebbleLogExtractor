@@ -64,7 +64,7 @@ abstract class AbstractRow
      * @param string $row
      * @param int $rowNumber
      *
-     * @throws Exception
+     * @throws \Exception
      */
     public function __construct(string $row, int $rowNumber)
     {
@@ -95,7 +95,7 @@ abstract class AbstractRow
     /**
      * Set DateTime.
      *
-     * @param DateTime $DateTime
+     * @param \DateTime $DateTime
      */
     public function setDateTime(\DateTime $DateTime)
     {
@@ -111,11 +111,68 @@ abstract class AbstractRow
     public function reformatRow()
     {
 
-        return [
+        $data = [
             basename($this->fileName),
-            $this->makeDateTime(),
-            implode(',', $this->explodedData)
+            $this->makeDate(),
+            $this->makeTime()
         ];
+        return array_merge($data, $this->getCleanData());
+    }
+
+    /**
+     * Return number of row in file.
+     *
+     * @return int
+     */
+    public function getRowNumber()
+    {
+
+        return $this->rowNumber;
+    }
+
+    /**
+     * Determine if data row has an useful data.
+     *
+     * @return mixed
+     */
+    public function containEmptyData()
+    {
+
+        /**
+         * Ex.'6,17099,0,0,0,-1'    - row with '-1' at the end - this questionnaire was skipped. We need those rows.
+         * Ex.'0    0    255    0    0'  - row with '255' at the middle position - this questionnaire was skipped. We need those rows.
+         * Ex.'0,1,0,0,0,0'         - row with only '0's with minutes (number on second position) - we don't know what it means. We need those rows.
+         * Ex.'13,0,0,0,0,0'        - row with only '0's without minutes (0 on second position) - questionnaires "showed" after Pebble clock was turn off. Skipp those rows.
+         */
+
+        $flag = true;
+
+        foreach ($this->explodedData as $key => $value) {
+
+            if ($key === 0 || ($key === 1 && $value !== 0)) {
+
+                continue;
+            }
+
+            if ($value != 0) {
+
+                $flag = false;
+            }
+        }
+
+        return $flag;
+    }
+
+    /**
+     * Replace blank data to 999,999,999,999.
+     */
+    protected function replaceBlankData()
+    {
+
+        if (!$this->hasBlankData()) {
+
+            $this->explodedData = [999, 999, 999, 999];
+        }
     }
 
     /**
@@ -140,16 +197,31 @@ abstract class AbstractRow
     abstract public function getDateTime();
 
     /**
-     * Determine if data row has data, not only 0.
+     * Create date for current row.
      *
      * @return mixed
      */
-    abstract public function containEmptyData();
+    abstract protected function makeDate();
 
     /**
-     * Create date and time for current row.
+     * Create time for current row.
      *
      * @return mixed
      */
-    abstract protected function makeDateTime();
+    abstract protected function makeTime();
+
+    /**
+     * Return array of data without numbering and any other artificial information.
+     *
+     * @return array
+     */
+    abstract protected function getCleanData();
+
+    /**
+     * Determine if row has useful data or blank records.
+     *
+     * @return bool
+     */
+    abstract protected function hasBlankData();
+
 } 

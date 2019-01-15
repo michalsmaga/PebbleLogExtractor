@@ -8,6 +8,9 @@
 
 namespace PebbleLogExtractor\Model;
 
+
+use PebbleLogExtractor\Helper;
+
 /**
  * Class File
  *
@@ -45,13 +48,29 @@ class File
     protected $fileType = 1;
 
     /**
+     * Number of first line with data.
+     *
+     * @var int
+     */
+    protected $dataFirstRowIdx = 0;
+
+    /**
+     * Number of last line with data.
+     *
+     * @var int
+     */
+    protected $dataLastRowIdx = 0;
+
+
+    /**
      * Simple constructor.
      *
-     * @param $file
+     * @param string $file
+     * @param \DateTime $DateTime
      *
-     * @throws Exception
+     * @throws \Exception
      */
-    public function __construct($file)
+    public function __construct(string $file, \DateTime $DateTime = null)
     {
 
         if (!file_exists($file)) {
@@ -63,7 +82,8 @@ class File
 
         $this->createContentAsArray();
         $this->determineFileType();
-        $this->createDateTime();
+        $this->setDateTime($DateTime);
+        $this->removeRowsWithoutData();
     }
 
     /**
@@ -79,6 +99,23 @@ class File
         if (count($this->contentArray) == 0) {
 
             throw new \Exception("File {$this->fileName} don't contain any data.");
+        }
+    }
+
+    /**
+     * Set DateTime property.
+     *
+     * @param \DateTime $DateTime
+     */
+    protected function setDateTime(\DateTime $DateTime)
+    {
+
+        if (!is_null($DateTime)) {
+
+            $this->DateTime = $DateTime;
+        } else {
+
+            $this->createDateTime();
         }
     }
 
@@ -107,6 +144,9 @@ class File
 
     /**
      * Determine type of file by given row.
+     * 1 - CloudPebble_XXXX
+     * 2 - gos-XXXX
+     * 3 - XXXX_mpp
      */
     protected function determineFileType()
     {
@@ -126,6 +166,36 @@ class File
     }
 
     /**
+     * Remove rows with technical information.
+     */
+    protected function removeRowsWithoutData()
+    {
+
+        $toRemove = [];
+        foreach ($this->contentArray as $key => $row) {
+
+            try {
+
+                $Row = Row::getInstance($row, $key, $this->fileType);
+                if (!$Row->checkIfUseful()) {
+
+                    $toRemove[] = $key;
+                }
+            } catch (\Exception $e) {
+
+                $toRemove[] = $key;
+            }
+        }
+
+        foreach ($toRemove as $key) {
+
+            unset($this->contentArray[$key]);
+        }
+
+        $this->contentArray = array_values($this->contentArray);
+    }
+
+    /**
      * Extract and format data from file.
      *
      * @return array
@@ -133,8 +203,8 @@ class File
     public function extractData()
     {
 
+        $this->setDataPosition();
         $data = [];
-        $idxRowWithData = 0;
 
         foreach ($this->contentArray as $key => $row) {
 
@@ -142,51 +212,90 @@ class File
 
                 $Row = Row::getInstance($row, $key, $this->fileType);
 
-                if (!$Row->checkIfUseful()) {
+                if (!$Row->checkIfUseful() || $this->checkRowToSkipp($Row)) {
 
                     continue;
                 }
 
-                if ($Row->containEmptyData()) {
-
-                    continue;
-                } else {
-
-                    $Row->setFileName($this->fileName);
-                    $Row->setDateTime($this->DateTime);
-                    $data[$key] = $Row;
-                    $idxRowWithData = $key;
-                }
+                $Row->setFileName($this->fileName);
+                $Row->setDateTime($this->DateTime);
+                $data[$key] = $Row;
             } catch (\Exception $e) {
 
                 continue;
             }
         }
 
-        $data = $this->cleanExtractedData($data, $idxRowWithData);
-
         return $this->reformat($data);
     }
 
     /**
-     * Remove items with key greater then given in $highestIdx from given table.
-     *
-     * @param array $data
-     * @param int $highestIdx
-     * @return array
+     * Set index of first and last row containing data.
      */
-    protected function cleanExtractedData(array $data, int $highestIdx)
+    protected function setDataPosition()
     {
 
-        foreach ($data as $key => $value) {
+        $totalRows = count($this->contentArray);
+        $lastPositionIdx = false;
 
-            if ($key > $highestIdx) {
+        foreach ($this->contentArray as $key => $row) {
 
-                unset($data[$key]);
+            try {
+
+                $Row = Row::getInstance($row, $key, $this->fileType);
+            } catch (\Exception $e) {
+
+                continue;
+            }
+
+            if ($Row->containEmptyData() === false) {
+
+                if ($lastPositionIdx === false) {
+
+                    $this->dataFirstRowIdx = $key;
+                }
+
+                $lastPositionIdx = $key;
             }
         }
 
-        return array_values($data);
+        $this->dataLastRowIdx = $totalRows > $lastPositionIdx ? ($lastPositionIdx + 1) : $lastPositionIdx;
+    }
+
+    /**
+     * Check if row has no data and if it should be ommited.
+     *
+     * @param AbstractRow $Row
+     * @return bool
+     */
+    protected function checkRowToSkipp(AbstractRow $Row)
+    {
+
+        $fileCleaningConf = Helper\ConfigHelper::get('files.' . $this->fileType);
+
+        if (!$Row->containEmptyData()) {
+
+            return false;
+        }
+
+        if (
+            (
+                $Row->getRowNumber() < $this->dataFirstRowIdx &&
+                $fileCleaningConf['remove_before_data']
+            ) || (
+                $this->dataFirstRowIdx < $Row->getRowNumber() &&
+                $Row->getRowNumber() > $this->dataFirstRowIdx &&
+                $fileCleaningConf['remove_between_data']
+            ) || (
+                $Row->getRowNumber() > $this->dataFirstRowIdx &&
+                $fileCleaningConf['remove_after_data']
+            )
+        ) {
+
+            return true;
+        }
+
+        return false;
     }
 
     /**

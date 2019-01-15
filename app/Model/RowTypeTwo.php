@@ -63,24 +63,55 @@ class RowTypeTwo extends AbstractRow
     }
 
     /**
-     * Determine if data row has data, not only 0.
+     * Create date for current row.
      *
      * @return mixed
      */
-    public function containEmptyData()
+    protected function makeDate()
     {
 
-        return end($this->explodedData) == -1;
+        return \DateTime::createFromFormat('d.m.Y, H:i:s', $this->explodedRow[1])->format('Y-m-d');
     }
 
     /**
-     * Create date and time for current row.
+     * Create time for current row.
      *
      * @return mixed
      */
-    protected function makeDateTime()
+    protected function makeTime()
     {
 
-        return \DateTime::createFromFormat('d.m.Y, H:i:s', $this->explodedRow[1])->format('Y-m-d H:m');
+        return \DateTime::createFromFormat('d.m.Y, H:i:s', $this->explodedRow[1])->format('H:m');
+    }
+
+    /**
+     * Return array of data without numbering and any other artificial information.
+     *
+     * @return array
+     */
+    protected function getCleanData()
+    {
+
+        array_shift($this->explodedData);
+
+        $this->replaceBlankData();
+
+        return $this->explodedData;
+    }
+
+    /**
+     * Determine if row has useful data or blank records.
+     *
+     * @return bool
+     */
+    protected function hasBlankData()
+    {
+
+        if ($this->explodedData[1] == 255) {
+
+            return false;
+        }
+
+        return true;
     }
 }
